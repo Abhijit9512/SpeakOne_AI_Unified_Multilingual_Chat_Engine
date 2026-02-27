@@ -75,8 +75,8 @@ export const LandingPage: React.FC = () => {
             </div>
             
             <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 font-display">
-              <span className="gradient-text">Smart India</span><br />
-              Chatbot System
+              <span className="gradient-text">SpeakOne AI</span><br />
+              Unified Multilingual Chat Engine
             </h1>
             
             <p className="text-xl md:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto">
