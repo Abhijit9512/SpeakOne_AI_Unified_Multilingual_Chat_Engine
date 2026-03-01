@@ -1,3 +1,4 @@
+console.log("ACTIVE CHAT INTERFACE FILE");
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Mic, Volume2, Globe } from 'lucide-react';
 import type { Message, ChatSession, Language } from '../types';
@@ -51,57 +52,85 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSessionUpdate })
     setMessages([welcomeMessage]);
   }, [selectedLanguage]);
   
-  const handleSendMessage = async () => {
-    if (!input.trim()) return;
-    
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: input,
-      sender: 'user',
-      timestamp: new Date(),
-      language: selectedLanguage.code
-    };
-    
-    setMessages(prev => [...prev, userMessage]);
-    setInput('');
-    setIsTyping(true);
-    
-    setTimeout(() => {
-      const response = nlpService.processMessage(input);
-      
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: response.text,
-        sender: 'bot',
-        timestamp: new Date(),
-        language: response.language,
-        confidence: response.confidence
-      };
-      
-      setMessages(prev => [...prev, botMessage]);
-      setSuggestions(response.suggestions || []);
-      setIsTyping(false);
-      
-      analyticsService.trackQuery(userMessage);
-      analyticsService.trackQuery(botMessage);
-      
-      const match = nlpService.findBestMatch(input, response.language);
-      if (match) {
-        analyticsService.trackIntent(match.faq.intent);
-        analyticsService.trackTopQuestion(match.faq.translations.en.question);
-      }
-      
-      const session: ChatSession = {
-        id: Date.now().toString(),
-        messages: [...messages, userMessage, botMessage],
-        startTime: new Date(),
-        lastActivity: new Date(),
-        language: response.language
-      };
-      
-      onSessionUpdate?.(session);
-    }, 1000);
+ const handleSendMessage = async () => {
+  if (!input.trim()) return;
+
+  const userMessage: Message = {
+    id: Date.now().toString(),
+    text: input,
+    sender: 'user',
+    timestamp: new Date(),
+    language: selectedLanguage.code
   };
+
+  setMessages(prev => [...prev, userMessage]);
+  setInput('');
+  setIsTyping(true);
+
+  /* ✅ STEP 1 → First check FAQ locally */
+  const faqResponse = nlpService.processMessage(input);
+
+  if (faqResponse && faqResponse.text) {
+    const botMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      text: faqResponse.text,
+      sender: 'bot',
+      timestamp: new Date(),
+      language: faqResponse.language,
+      confidence: faqResponse.confidence
+    };
+
+    setMessages(prev => [...prev, botMessage]);
+    setSuggestions(faqResponse.suggestions || []);
+    setIsTyping(false);
+
+    analyticsService.trackQuery(userMessage);
+    analyticsService.trackQuery(botMessage);
+
+    return; // ✅ stop here if FAQ answer found
+  }
+
+  /* ✅ STEP 2 → If FAQ not found → call backend API */
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message: input }),
+    });
+
+    const data = await res.json();
+
+    const botMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      text: data.reply || "Sorry, I couldn’t understand your question.",
+      sender: "bot",
+      timestamp: new Date(),
+      language: selectedLanguage.code,
+    };
+
+    setMessages(prev => [...prev, botMessage]);
+
+    analyticsService.trackQuery(userMessage);
+    analyticsService.trackQuery(botMessage);
+
+  } catch (error) {
+    console.error(error);
+
+    const botMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      text: "Server error. Please try again later.",
+      sender: "bot",
+      timestamp: new Date(),
+      language: selectedLanguage.code,
+    };
+
+    setMessages(prev => [...prev, botMessage]);
+  }
+
+  setIsTyping(false);
+};
   
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
